@@ -1,3 +1,7 @@
+# Note from Lakshya 
+
+I worked on the DBW pin management in DBW_Pins.h, fixed several steering/throttle issues, and implemented a data logger. I also had small contributions on the RC (remote controller) and the brakes.
+
 # DriveByWire
 
 This repository is for use with the **Drive by Wire** board created to be used for the ELCANO self-driving tricycle. In order for this module to run external libraries are required.
