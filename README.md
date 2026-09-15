@@ -1,81 +1,441 @@
-# Note from Lakshya 
+# Elcano Drive-by-Wire System
 
-I worked on the DBW pin management in DBW_Pins.h, fixed several steering/throttle issues, and implemented a data logger. I also had small contributions on the RC (remote controller) and the brakes.
+Embedded C++ software for the **Elcano autonomous tricycle's drive-by-wire (DBW) system**, developed as part of autonomous vehicle research at the University of Washington.
 
-# DriveByWire
+The drive-by-wire controller acts as the low-level interface between autonomous or remote driving commands and the vehicle's physical **steering, throttle, and braking systems**. It supports CAN-based communication, manual RC control, hardware-specific configuration, subsystem testing, and onboard telemetry logging.
 
-This repository is for use with the **Drive by Wire** board created to be used for the ELCANO self-driving tricycle. In order for this module to run external libraries are required.
+## My Contributions
 
-Repositories were updated 6/8/2023 but clobbered previous history. Chief addition is use of an RC controller that allows manual control of throttle, brakes and steering.
-The Sender files are intended for use on the Hi-Level board and do not really belong in the Drive-by-wire repository.
+My work in this repository focused primarily on:
 
-Libraries needed are listed below:
+- Drive-by-wire pin configuration and hardware mapping in `DBW_Pins.h`
+- Debugging and fixing steering and throttle behavior
+- Implementing onboard SD-card telemetry logging
+- Smaller contributions to remote-control and braking functionality
 
-ALL Versions ________________________________
-* PID by Brett Beauregard
-    https://github.com/br3ttb/Arduino-PID-Library
-    A simple controller calculator (proportional integral derivative) to calculate the error between a desired output and an actual output. Has files **PID_v1**
+The surrounding repository contains collaborative Elcano drive-by-wire infrastructure developed by the research team.
 
-Version 3 (Arduino Mega) ________________________________
-* CAN_BUS_SHIELD by Seeed-Studio
-    https://github.com/Seeed-Studio/CAN_BUS_Shield
-    Contains CAN_BUS communication protocols and required files such as **mcp_can** and **can-serial**
+## System Overview
 
-* Pin Change Interrupt by Nico Hood
-    https://github.com/NicoHood/PinChangeInterrupt
-    For custom configuration of Arduino pin properties. Has files **PinChangeInterupt**
+The drive-by-wire controller sits between higher-level vehicle commands and the tricycle's physical actuators.
 
-* MCP48x2 DAC by Jonas Forsberg
-    https://github.com/SweBarre/MCP48x2.
-    Library for Digital to anolog converter. Has files **MCP48x2**
-
-Version 4 (Arduino Due)  _______________________________________________
-* Due CAN and CAN Common by Collin Kidder
-    https://github.com/collin80/due_can
-    https://github.com/collin80/can_common
-
-
-## To Install
-
-* Download the **Drive_By_Wire** module into the project parent directory
+```text
+      High-Level Autonomous System
+                  |
+                  | CAN
+                  v
+        Drive-by-Wire Controller
+                  |
+       +----------+----------+
+       |          |          |
+       v          v          v
+    Throttle   Steering    Brakes
+       |          |          |
+       +----------+----------+
+                  |
+                  v
+          Elcano Tricycle
 ```
-git clone https://github.com/elcano/Drive-by-wire.git
-```
-* Move into the **Drive_By_Wire** folder
-```
-cd Drive_By_Wire
-```
-* Download the required libraries
-```
-git clone https://github.com/Seeed-Studio/Seeed_Arduino_CAN.git
-git clone https://github.com/br3ttb/Arduino-PID-Library.git
-git clone https://github.com/NicoHood/PinChangeInterrupt.git
-git clone https://github.com/SweBarre/MCP48x2.git
-git clone https://github.com/ivanseidel/DueTimer.git
-git clone https://github.com/collin80/can_common.git
-git clone https://github.com/collin80/due_can.git
-```
-* Add the folders above to the IDE directory. In Windows, add the required libraries to: C:\Users\<username>\Documents\Arduino\libraries
-* Arduino Due requires additional installation. On the IDE, go to Tools -> Boards -> Boards Manager -> Arduino SAM Boards (32-bits ARM Cortex-M3) 
 
-## Navigating Arduino IDE: 
-* **Selecting Board:** Tools -> Board -> Arduino AVR/SAM Boards -> Arduino Mega/Due
-* **Selecting Serial Port:** Tools -> Port -> COM (Arduino Mega/Due)
-* **Accessing Serial Monitor:** Right-hand Corner -> Select Baud Rate (115200)
+The controller can also receive commands from an RC transmitter for manual vehicle operation.
 
+At runtime, the software manages desired speed, braking, and steering values and translates them into commands for the corresponding hardware controllers.
 
-## Drive-by-Wire: 
-* **Low-level board code with RC control support with existing code for brakes, steering, and throttle.** 
+## Core Components
 
-## Test: 
-* **Low-level board code with three functions to test each subsystems individually (brakes, steering, throttle).** 
-* testBrake(): Activates brakes with 24V via Stop(), Holds brakes with 12V after 800ms via Update(), Releases brakes every ~2 seconds.
-* testThrottle(): Gradually increases speed and decreases speed on DACA.
-* testSteering(): Changes directions every 3 seconds, moving the linear actuator. 
+### Vehicle Controller
 
-## Sender: 
-* **High-level board code to communicate with low-level board using CAN communication.** 
-* Arguments for Function: Each data is reserved for 2 bytes. 
-    *   currentSpeed: Controls the speed via the DACA, input: (0 -255).
-    *   currentBrake: Apply and updates brakes if necessary, input: (0 - releases brakes, anything above 0 - applies brakes).
-    *   currentAngle: Changes direction based on input (may need to calibrate based on sensors), left: 779 (1ms), middle: 722 (1.5ms), right: 639 (1.85ms).
+`DBW/Vehicle.cpp`
+
+The `Vehicle` class coordinates the low-level vehicle systems.
+
+It maintains desired and current values for:
+
+```text
+Speed
+Brake state
+Steering angle
+```
+
+and interfaces with:
+
+- Throttle controller
+- Steering controller
+- Brake controller
+- RC controller
+- CAN bus
+- SD-card telemetry logger
+- Real-time clock
+
+The vehicle can operate using commands received over CAN or through the RC-control path.
+
+### Steering
+
+`DBW/SteeringController.cpp`
+
+The steering controller manages the vehicle's steering actuator and wheel-angle feedback.
+
+Vehicle-specific calibration values map wheel-angle sensor readings to physical steering positions.
+
+The configuration includes limits for:
+
+```text
+Maximum left turn
+Maximum right turn
+Straight-ahead sensor position
+Steering actuator pulse range
+```
+
+Steering behavior can therefore be calibrated to the physical vehicle rather than relying on fixed assumptions about sensor alignment.
+
+### Throttle
+
+`DBW/ThrottleController.cpp`
+
+The throttle controller converts requested vehicle speed into commands for the electric drive system.
+
+The configuration defines:
+
+- Maximum vehicle speed
+- Minimum interpreted speed
+- Acceleration limits
+- PID tuning parameters
+
+PID control is used as part of the vehicle-control implementation.
+
+### Braking
+
+`DBW/Brakes.cpp`
+
+The braking subsystem controls the physical brake hardware.
+
+The system supports separate brake activation and holding behavior, including a configured maximum duration for high-voltage brake activation before transitioning to a holding state.
+
+### Remote Control
+
+`DBW/RC_Controller.cpp`
+
+The RC controller provides a manual-control path for:
+
+- Throttle
+- Steering
+- Braking
+
+This allows the vehicle to be operated manually in addition to accepting autonomous commands.
+
+## CAN Communication
+
+The drive-by-wire system communicates with other vehicle components through a CAN bus operating at:
+
+```text
+500 kbps
+```
+
+CAN message identifiers are defined in:
+
+```text
+DBW/Can_Protocol.h
+```
+
+The protocol includes identifiers for several system components and message types, including:
+
+```text
+RC status
+High-level status
+Low-level status
+RC driving commands
+High-level driving commands
+Vehicle state
+LiDAR
+Sonar
+Camera detections
+```
+
+The low-level controller can receive desired vehicle commands and report vehicle state back to the high-level system.
+
+## Hardware Support
+
+The repository contains configuration for multiple generations of the drive-by-wire hardware.
+
+### Version 3
+
+Designed around the:
+
+```text
+Arduino Mega
+```
+
+with external CAN hardware.
+
+### Version 4
+
+Designed around the:
+
+```text
+Arduino Due
+```
+
+using the Due's CAN capabilities.
+
+Hardware configuration is controlled through `DBWversion` and the corresponding pin definitions.
+
+## Hardware Pin Management
+
+`DBW/DBW_Pins.h`
+
+This file maps software functionality to the physical drive-by-wire hardware.
+
+Configured signals include:
+
+### Steering
+
+```text
+Left wheel-angle sensor
+Right wheel-angle sensor
+Steering actuator pulse
+Steering power
+```
+
+### Braking
+
+```text
+Brake activation
+Brake voltage selection
+Brake control
+```
+
+### Vehicle State
+
+```text
+Wheel rotation
+Speedometer
+E-bike controller power
+```
+
+### Communication
+
+```text
+CAN
+SPI
+```
+
+The mappings differ between Arduino Mega and Arduino Due versions to account for changes in the underlying drive-by-wire hardware.
+
+## Vehicle Configuration
+
+`DBW/Settings.h` / `SettingsTemplate.h`
+
+Vehicle-specific parameters are separated from the main control logic.
+
+Configuration includes:
+
+```text
+Maximum vehicle speed
+Acceleration limits
+Brake timing
+Steering limits
+Wheel-angle sensor calibration
+Wheel diameter
+Throttle PID gains
+Steering PID gains
+```
+
+For example, steering sensor values are calibrated against the physical minimum, maximum, and straight-ahead wheel positions.
+
+This allows the same controller architecture to be adapted to different vehicle hardware and calibration values.
+
+## Telemetry and Data Logging
+
+The drive-by-wire controller includes an SD-card logging system for recording vehicle behavior during testing.
+
+At startup, the system initializes a real-time clock and creates a timestamped CSV file.
+
+Log files use names based on the current date:
+
+```text
+MM_DD_XX.CSV
+```
+
+where `XX` increments to avoid overwriting previous test runs.
+
+Each telemetry record contains:
+
+```text
+epoch_time_s
+time_ms
+desired_speed_ms
+desired_brake
+desired_angle
+current_speed
+current_brake
+current_angle
+throttle_pulse
+steerpulse
+brakeHold
+steeringVal
+steeringAngleRight
+```
+
+The logger records both **requested commands and actual controller state**, making it possible to analyze how the physical system responded during vehicle testing.
+
+Data is flushed to the SD card during operation so that recorded telemetry is preserved for debugging and post-run analysis.
+
+## Testing
+
+The repository includes a dedicated `Test/` implementation for testing low-level vehicle subsystems independently.
+
+### Brake Test
+
+Exercises brake activation, holding, and release behavior.
+
+### Throttle Test
+
+Varies the throttle output to test acceleration and deceleration behavior.
+
+### Steering Test
+
+Commands the steering actuator through different directions to test steering response.
+
+These tests allow individual hardware components to be evaluated without requiring the complete autonomous-driving stack.
+
+## Repository Structure
+
+```text
+elcano-work/
+│
+├── DBW/
+│   ├── Drive_By_Wire.ino
+│   ├── DBW.ino
+│   ├── Vehicle.cpp
+│   ├── Vehicle.h
+│   ├── DBW_Pins.h
+│   ├── Settings.h
+│   ├── SettingsTemplate.h
+│   ├── Can_Protocol.h
+│   ├── SteeringController.cpp
+│   ├── SteeringController.h
+│   ├── ThrottleController.cpp
+│   ├── ThrottleController.h
+│   ├── Brakes.cpp
+│   ├── Brakes.h
+│   ├── RC_Controller.cpp
+│   └── RC_Controller.h
+│
+├── Test/
+│   ├── Test.ino
+│   ├── Test.cpp
+│   ├── SteeringController.cpp
+│   ├── ThrottleController.cpp
+│   ├── Brakes.cpp
+│   └── ...
+│
+├── Documentation/
+│   └── README.md
+│
+└── README.md
+```
+
+## Technologies
+
+### Language
+
+- C++
+
+### Embedded Platforms
+
+- Arduino Due
+- Arduino Mega
+
+### Vehicle Communication
+
+- CAN
+- SPI
+
+### Control
+
+- PID control
+- Wheel-angle sensor feedback
+- RC control
+
+### Hardware Interfaces
+
+- Steering actuator
+- Electric throttle controller
+- Brake system
+- SD card
+- Real-time clock
+
+## Dependencies
+
+The repository documentation identifies the following external Arduino libraries.
+
+### PID
+
+Brett Beauregard's Arduino PID library is used for controller calculations.
+
+### CAN
+
+For Arduino Mega:
+
+```text
+CAN_BUS_Shield / Seeed Studio CAN libraries
+```
+
+For Arduino Due:
+
+```text
+due_can
+can_common
+```
+
+### Pin Change Interrupt
+
+Used for configurable interrupt behavior on supported Arduino hardware.
+
+### MCP48x2
+
+Provides support for the digital-to-analog converter used by the throttle system.
+
+Additional functionality uses Arduino libraries for components such as SPI, SD-card access, and real-time-clock communication.
+
+## Installation
+
+Clone the repository and install the required Arduino libraries for the target drive-by-wire hardware.
+
+For Arduino Due, ensure that **Arduino SAM Boards (32-bit ARM Cortex-M3)** support is installed through the Arduino IDE Board Manager.
+
+Then select the appropriate board and serial port:
+
+```text
+Tools -> Board -> Arduino Due / Arduino Mega
+Tools -> Port -> <connected Arduino>
+```
+
+The serial monitor is configured for:
+
+```text
+115200 baud
+```
+
+Hardware-specific settings and calibration values should be verified before running the controller on a vehicle.
+
+## Safety
+
+This repository interfaces with physical steering, throttle, and braking hardware.
+
+It is research software rather than a production automotive control system. Hardware configuration, actuator limits, steering calibration, CAN configuration, and safety systems must be validated for the specific test platform before operation.
+
+## Research Context
+
+This work formed part of the Elcano autonomous-vehicle research platform at the University of Washington.
+
+The project provided experience working across the boundary between software and physical vehicle hardware, including:
+
+- Embedded C++ development
+- Hardware/software integration
+- CAN communication
+- Vehicle-control systems
+- Steering and throttle debugging
+- Sensor calibration
+- Telemetry instrumentation
+- Physical-system testing
